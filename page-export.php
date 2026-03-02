@@ -64,3 +64,131 @@ function spe_handle_export()
   __export_wp_fork($args);
   exit;
 }
+
+/**
+ * Add Export Options admin page to WordPress admin menu
+ */
+function add_export_options_admin_page()
+{
+  add_menu_page(
+    'Export Page Options',           // Page title
+    'Export Page Options',           // Menu title
+    'manage_options',           // Capability required
+    'export-page-options',           // Menu slug
+    'render_export_options_page', // Callback function
+    'dashicons-download',       // Icon
+    80                          // Position
+  );
+}
+add_action('admin_menu', 'add_export_options_admin_page');
+
+/**
+ * Handle the export data request
+ */
+function handle_export_options_data()
+{
+  // Check if export button was clicked
+  if (!isset($_POST['export_data'])) {
+    return;
+  }
+
+  // Verify nonce
+  if (!isset($_POST['export_options_nonce']) || !wp_verify_nonce($_POST['export_options_nonce'], 'export_options_action')) {
+    wp_die(__('Security check failed.'));
+  }
+
+  // Check user capabilities
+  if (!current_user_can('manage_options')) {
+    wp_die(__('You do not have sufficient permissions to perform this action.'));
+  }
+
+  // Get Elementor active kit ID
+  $kit_id = get_option('elementor_active_kit');
+
+  if (!$kit_id) {
+    wp_die(__('No active Elementor kit found.'));
+  }
+
+  // Get kit settings
+  $kit_settings = get_post_meta($kit_id, '_elementor_page_settings', true);
+
+  // Get kit post data
+  $kit_post = get_post($kit_id);
+
+  // Prepare export data
+  $export_data = array(
+    'kit_id' => $kit_id,
+    'kit_name' => $kit_post->post_title,
+    'kit_settings' => $kit_settings,
+    'export_date' => current_time('Y-m-d H:i:s'),
+    'site_url' => get_site_url(),
+  );
+
+  // Convert to JSON
+  $json_data = json_encode($export_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+  // Set headers for file download
+  header('Content-Type: application/json');
+  header('Content-Disposition: attachment; filename="elementor-kit-export-' . date('Y-m-d-H-i-s') . '.json"');
+  header('Content-Length: ' . strlen($json_data));
+  header('Cache-Control: no-cache, must-revalidate');
+  header('Expires: 0');
+
+  // Output JSON and exit
+  echo $json_data;
+  exit;
+}
+add_action('admin_init', 'handle_export_options_data');
+
+/**
+ * Render the Export Options admin page
+ */
+function render_export_options_page()
+{
+  // Check user capabilities
+  if (!current_user_can('manage_options')) {
+    wp_die(__('You do not have sufficient permissions to access this page.'));
+  }
+
+  // Get Elementor kit info for display
+  $kit_id = get_option('elementor_active_kit');
+  $kit_post = $kit_id ? get_post($kit_id) : null;
+
+?>
+  <div class="wrap">
+    <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+
+    <div class="card">
+      <h2>Export Elementor Kit Data</h2>
+
+      <?php if ($kit_post): ?>
+        <p><strong>Active Kit:</strong> <?php echo esc_html($kit_post->post_title); ?> (ID: <?php echo esc_html($kit_id); ?>)</p>
+        <p>This will export all global colors, fonts, and site settings from your active Elementor kit.</p>
+      <?php else: ?>
+        <p style="color: #d63638;"><strong>Warning:</strong> No active Elementor kit found.</p>
+      <?php endif; ?>
+
+      <form method="post" action="">
+        <?php wp_nonce_field('export_options_action', 'export_options_nonce'); ?>
+
+        <p>
+          <button type="submit" name="export_data" class="button button-primary" <?php echo !$kit_post ? 'disabled' : ''; ?>>
+            <span class="dashicons dashicons-download" style="vertical-align: middle;"></span>
+            Export Kit Data as JSON
+          </button>
+        </p>
+      </form>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+      <h3>What's Included in the Export?</h3>
+      <ul style="list-style: disc; margin-left: 20px;">
+        <li>Global Colors (System & Custom)</li>
+        <li>Global Fonts (System & Custom Typography)</li>
+        <li>Site Settings (Buttons, Forms, Lightbox, etc.)</li>
+        <li>Kit metadata and configuration</li>
+      </ul>
+    </div>
+  </div>
+<?php
+}
