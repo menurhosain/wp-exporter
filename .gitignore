@@ -1,4 +1,6 @@
 .env
+.php-cs-fixer.dist.php
+.php-cs-fixer.cache
 node_modules
 build
 assets/build
