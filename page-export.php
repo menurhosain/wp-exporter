@@ -19,15 +19,14 @@
 
 // Add export link to page actions
 add_filter('page_row_actions', 'spe_add_export_link', 10, 2);
+add_filter('post_row_actions', 'spe_add_export_link', 10, 2);
 
 function spe_add_export_link($actions, $post) {
-	if ('page' === $post->post_type) {
 		$url = wp_nonce_url(
 			admin_url('admin-post.php?action=spe_export_page&post_id=' . $post->ID),
 			'spe_export_page_' . $post->ID
 		);
 		$actions['export_page'] = '<a href="' . esc_url($url) . '">Export XML</a>';
-	}
 	return $actions;
 }
 
@@ -53,7 +52,7 @@ function spe_handle_export() {
 	require_once __DIR__ . '/includes/WP_Export_Fork.php';
 
 	// Create temporary XML export for just this page
-	$args = ['content' => 'page', 'post_id' => $post_id,];
+	$args = ['content' => $post->post_type, 'post_id' => $post_id,];
 
 	header('Content-Description: File Transfer');
 	header('Content-Disposition: attachment; filename=' . sanitize_file_name($post->post_name) . '-export.xml');
