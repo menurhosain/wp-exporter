@@ -1,7 +1,6 @@
 <?php
-
 /**
- * Plugin Name: Page Exporter
+ * Plugin Name: RS Exporter
  * Description: Export Single Page.
  * Version: 0.0.1
  * Author URI: http://rstheme.com
@@ -185,4 +184,81 @@ function render_export_options_page() {
     </div>
   </div>
 <?php
+}
+
+
+/**
+ * Elementor Page Template Export
+ */
+add_filter('page_row_actions', 'rs_add_elementor_json_export_link', 10, 2);
+
+function rs_add_elementor_json_export_link($actions, $post) {
+	// Only show for posts built with Elementor
+	if (get_post_meta($post->ID, '_elementor_edit_mode', true) !== 'builder') {
+		return $actions;
+	}
+
+	$url = wp_nonce_url(
+		admin_url('admin-post.php?action=rs_export_page_json&post_id=' . $post->ID),
+		'rs_export_page_json' . $post->ID
+	);
+	$actions['export_page_json'] = '<a href="' . esc_url($url) . '">Export Elementor JSON</a>';
+
+	return $actions;
+}
+
+add_action('admin_post_rs_export_page_json', 'rs_handle_export_page_json');
+
+function rs_handle_export_page_json() {
+	if (empty($_GET['post_id'])) {
+		wp_die('No post specified.');
+	}
+
+	$post_id = intval($_GET['post_id']);
+
+	if (!current_user_can('edit_posts') || !wp_verify_nonce($_GET['_wpnonce'], 'rs_export_page_json' . $post_id)) {
+		wp_die('You do not have permission to export this post.');
+	}
+
+	$post = get_post($post_id);
+	if (!$post) {
+		wp_die('Post not found.');
+	}
+
+	$elementor_data = get_post_meta($post_id, '_elementor_data', true);
+	if (empty($elementor_data)) {
+		wp_die('No Elementor data found for this post. Make sure it was built with Elementor.');
+	}
+
+	$content = json_decode($elementor_data, true);
+	if (json_last_error() !== JSON_ERROR_NONE) {
+		wp_die('Failed to decode Elementor data.');
+	}
+
+	$page_settings = get_post_meta($post_id, '_elementor_page_settings', true);
+	if (!is_array($page_settings)) {
+		$page_settings = [];
+	}
+
+	// Replace absolute site URL with Elementor's placeholder so the JSON is portable
+	$content_json = str_replace(get_site_url(), '[url]', json_encode($content));
+	$content = json_decode($content_json, true);
+
+	$export_data = [
+		'content'       => $content,
+		'page_settings' => $page_settings,
+		'version'       => '0.4',
+		'title'         => $post->post_title,
+		'type'          => 'page',
+	];
+
+	$filename = 'data.json';
+
+	header('Content-Type: application/octet-stream');
+	header('Content-Disposition: attachment; filename="' . $filename . '"');
+	header('Cache-Control: no-cache, must-revalidate');
+	header('Expires: 0');
+
+	echo json_encode($export_data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+	exit;
 }
